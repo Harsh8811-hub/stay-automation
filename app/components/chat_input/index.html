@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Custom Chat Input</title>
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <style>
+    :root {
+      --primary-color: #818cf8;
+      --bg-color: rgba(15, 17, 26, 0.95);
+      --border-color: rgba(129, 140, 248, 0.25);
+      --text-color: #e2e8f0;
+      --hover-bg: rgba(129, 140, 248, 0.12);
+      --placeholder-color: #64748b;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Source Sans Pro', sans-serif;
+      background: transparent;
+      overflow: hidden;
+    }
+
+    .chat-container {
+      display: flex;
+      flex-direction: column;
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      background: var(--bg-color);
+      box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+      padding: 8px 12px;
+      transition: box-shadow 0.2s, border-color 0.2s;
+    }
+
+    .chat-container:focus-within {
+      border-color: var(--primary-color);
+      box-shadow: 0 4px 20px rgba(129, 140, 248, 0.2);
+    }
+
+    .preview-area {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 0;
+      padding: 0 4px;
+    }
+
+    .preview-area:not(:empty) {
+      margin-bottom: 8px;
+    }
+
+    .preview-chip {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      background: var(--hover-bg);
+      border-radius: 12px;
+      padding: 4px 8px 4px 12px;
+      font-size: 13px;
+      color: var(--text-color);
+      max-width: 200px;
+    }
+
+    .preview-chip span {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-right: 8px;
+    }
+
+    .preview-chip button {
+      background: none;
+      border: none;
+      color: #666;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2px;
+      border-radius: 50%;
+    }
+
+    .preview-chip button:hover {
+      background: rgba(0,0,0,0.1);
+      color: var(--text-color);
+    }
+
+    .input-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .icon-btn {
+      background: none;
+      border: none;
+      color: #888;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 6px;
+      border-radius: 50%;
+      transition: color 0.2s, background 0.2s;
+    }
+
+    .icon-btn:hover {
+      background: var(--hover-bg);
+      color: var(--text-color);
+    }
+
+    .icon-btn.recording {
+      color: var(--primary-color);
+      animation: pulse 1.5s infinite;
+    }
+
+    textarea {
+      flex: 1;
+      border: none;
+      background: transparent;
+      resize: none;
+      font-family: inherit;
+      font-size: 15px;
+      color: var(--text-color);
+      outline: none;
+      padding: 8px 0;
+      min-height: 24px;
+      max-height: 120px;
+      line-height: 1.4;
+    }
+
+    textarea::placeholder {
+      color: var(--placeholder-color);
+    }
+
+    .send-btn {
+      background: var(--primary-color);
+      color: #0f111a;
+      border: none;
+      border-radius: 50%;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      opacity: 0.35;
+      pointer-events: none;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+
+    .send-btn.active {
+      opacity: 1;
+      pointer-events: auto;
+      cursor: pointer;
+    }
+
+    .send-btn.active:hover {
+      transform: scale(1.05);
+    }
+
+    .send-btn.active:active {
+      transform: scale(0.95);
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.1); opacity: 0.7; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    #fileInput {
+      display: none;
+    }
+    
+    .recording-indicator {
+      display: none;
+      flex: 1;
+      align-items: center;
+      gap: 8px;
+      color: var(--primary-color);
+      font-size: 14px;
+      font-weight: 600;
+    }
+    
+    .recording-indicator.active {
+      display: flex;
+    }
+  </style>
+</head>
+<body>
+  <div class="chat-container" id="container">
+    <div class="preview-area" id="previewArea"></div>
+    <div class="input-row">
+      <input type="file" id="fileInput" accept="image/*,audio/*,application/pdf">
+      <button class="icon-btn" id="attachBtn" title="Attach file">
+        <i class="ph ph-paperclip" style="font-size: 20px;"></i>
+      </button>
+
+      <textarea id="textInput" placeholder="Message StayChat..." rows="1"></textarea>
+
+      <button class="icon-btn" id="micBtn" title="Dictate message">
+        <i class="ph ph-microphone" style="font-size: 20px;"></i>
+      </button>
+
+      <button class="send-btn" id="sendBtn" title="Send">
+        <i class="ph ph-paper-plane-right" style="font-size: 16px;"></i>
+      </button>
+    </div>
+  </div>
+
+  <script>
+    // Minimal Streamlit Component API
+    function sendMessageToStreamlitClient(type, data) {
+      window.parent.postMessage(Object.assign({ isStreamlitMessage: true, type: type }, data), "*");
+    }
+    
+    const Streamlit = {
+      setComponentReady: function() {
+        sendMessageToStreamlitClient("streamlit:componentReady", { apiVersion: 1 });
+      },
+      setFrameHeight: function(height) {
+        sendMessageToStreamlitClient("streamlit:setFrameHeight", { height: height });
+      },
+      setComponentValue: function(value) {
+        sendMessageToStreamlitClient("streamlit:setComponentValue", { value: value });
+      }
+    };
+
+    window.addEventListener("message", function(event) {
+      if (event.data.type === "streamlit:render") {
+        // Keep dark theme — only adopt accent from Streamlit if provided
+        const theme = event.data.theme;
+        if (theme && theme.primaryColor) {
+          document.documentElement.style.setProperty('--primary-color', theme.primaryColor);
+        }
+        updateHeight();
+        textInput.focus();
+      }
+    });
+
+    // State
+    let attachedFile = null; // { name, type, data }
+    let isRecording = false;
+    let recognition = null;
+    let finalTranscript = '';
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      
+      recognition.onresult = (event) => {
+        let interimTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            finalTranscript += event.results[i][0].transcript;
+          } else {
+            interimTranscript += event.results[i][0].transcript;
+          }
+        }
+        textInput.value = finalTranscript + interimTranscript;
+        updateHeight();
+        updateSendButton();
+      };
+      
+      recognition.onerror = (event) => {
+        console.error('Speech recognition error:', event.error);
+        stopDictation();
+      };
+      
+      recognition.onend = () => {
+        if (isRecording) {
+          stopDictation();
+        }
+      };
+    }
+    
+    function stopDictation() {
+      if (recognition) recognition.stop();
+      micBtn.classList.remove('recording');
+      isRecording = false;
+      textInput.placeholder = "Message StayChat...";
+    }
+
+    // Elements
+    const fileInput = document.getElementById('fileInput');
+    const attachBtn = document.getElementById('attachBtn');
+    const micBtn = document.getElementById('micBtn');
+    const sendBtn = document.getElementById('sendBtn');
+    const textInput = document.getElementById('textInput');
+    const previewArea = document.getElementById('previewArea');
+    const container = document.getElementById('container');
+    const recordingIndicator = document.getElementById('recordingIndicator');
+
+    function updateHeight() {
+      // Auto-resize textarea
+      textInput.style.height = 'auto';
+      textInput.style.height = Math.min(textInput.scrollHeight, 120) + 'px';
+      
+      // Update iframe height
+      Streamlit.setFrameHeight(container.offsetHeight + 10);
+    }
+
+    function updateSendButton() {
+      if (textInput.value.trim() !== '' || attachedFile !== null) {
+        sendBtn.classList.add('active');
+      } else {
+        sendBtn.classList.remove('active');
+      }
+    }
+
+    function renderPreview() {
+      previewArea.innerHTML = '';
+      if (attachedFile) {
+        const chip = document.createElement('div');
+        chip.className = 'preview-chip';
+        
+        let icon = 'ph-file';
+        if (attachedFile.type.startsWith('image/')) icon = 'ph-image';
+        else if (attachedFile.type.startsWith('audio/')) icon = 'ph-music-notes';
+        else if (attachedFile.type === 'application/pdf') icon = 'ph-file-pdf';
+        
+        chip.innerHTML = `
+          <i class="ph ${icon}" style="margin-right: 4px;"></i>
+          <span>${attachedFile.name}</span>
+          <button id="removeFileBtn"><i class="ph ph-x"></i></button>
+        `;
+        previewArea.appendChild(chip);
+        
+        document.getElementById('removeFileBtn').addEventListener('click', () => {
+          attachedFile = null;
+          fileInput.value = '';
+          renderPreview();
+          updateSendButton();
+          updateHeight();
+        });
+      }
+      updateHeight();
+    }
+
+    // Attach File Flow
+    attachBtn.addEventListener('click', () => {
+      fileInput.click();
+    });
+
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          // Extract base64 part
+          const base64data = event.target.result.split(',')[1];
+          attachedFile = {
+            name: file.name,
+            type: file.type,
+            data: base64data
+          };
+          renderPreview();
+          updateSendButton();
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+
+    // Mic Recording Flow
+    micBtn.addEventListener('click', async () => {
+      if (isRecording) {
+        stopDictation();
+      } else {
+        if (!recognition) {
+          alert("Speech recognition is not supported in this browser. Try Chrome or Edge.");
+          return;
+        }
+        finalTranscript = textInput.value;
+        if (finalTranscript.length > 0 && !finalTranscript.endsWith(' ')) {
+          finalTranscript += ' ';
+        }
+        try {
+          recognition.start();
+          isRecording = true;
+          micBtn.classList.add('recording');
+          textInput.placeholder = "Listening...";
+          textInput.focus();
+        } catch (err) {
+          console.error('Error starting recognition:', err);
+        }
+      }
+    });
+
+    // Text Input Flow
+    textInput.addEventListener('input', () => {
+      updateHeight();
+      updateSendButton();
+    });
+
+    textInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendData();
+      }
+    });
+
+    // Send Flow
+    sendBtn.addEventListener('click', () => {
+      sendData();
+    });
+
+    function sendData() {
+      const text = textInput.value.trim();
+      if (text === '' && attachedFile === null) return;
+      if (sendBtn.disabled) return;
+
+      sendBtn.disabled = true;
+
+      const payload = {
+        message_id: Date.now().toString() + '_' + Math.random().toString(36).slice(2),
+        text: text,
+        file: attachedFile
+      };
+
+      Streamlit.setComponentValue(payload);
+
+      textInput.value = '';
+      finalTranscript = '';
+      attachedFile = null;
+      fileInput.value = '';
+      renderPreview();
+      updateSendButton();
+      updateHeight();
+    }
+
+    Streamlit.setComponentReady();
+    updateHeight();
+  </script>
+</body>
+</html>
