@@ -1,6 +1,6 @@
 # Stay automation
 
-StayInn hotel guest chat automation bot (WhatsApp / booking lifecycle).
+hotel guest chat automation bot (WhatsApp / booking lifecycle).
 
 ## Setup
 
